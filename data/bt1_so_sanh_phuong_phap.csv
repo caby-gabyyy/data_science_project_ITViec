@@ -1,0 +1,5 @@
+﻿Phương pháp,P@5 cùng lĩnh vực,KTC 95% lĩnh vực,P@5 cùng loại hình,Coverage,Thời gian (s)
+TF-IDF + cosine (sklearn),0.204,"[0.185, 0.223]",0.488,0.96,0.13
+Gensim TF-IDF,0.235,"[0.214, 0.254]",0.482,0.927,0.29
+Gensim LSI (+),0.222,"[0.203, 0.245]",0.504,0.981,0.64
+Ngẫu nhiên (baseline),0.13,,0.436,,

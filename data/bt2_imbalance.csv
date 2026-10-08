@@ -1,0 +1,6 @@
+﻿Cách xử lý,Accuracy,Precision_No,Recall_No,F1_No,F1_macro,ROC_AUC
+Không xử lý,0.889,0.75,0.146,0.244,0.592,0.881
+class_weight='balanced',0.867,0.469,0.626,0.536,0.73,0.88
+RandomOverSampler,0.877,0.498,0.587,0.539,0.734,0.88
+SMOTE,0.876,0.494,0.573,0.53,0.729,0.88
+RandomUnderSampler,0.796,0.352,0.791,0.487,0.68,0.871

@@ -1,0 +1,14 @@
+﻿env,scenario,model,Accuracy,Precision_No,Recall_No,F1_No,F1_macro,ROC_AUC,train_s
+scikit-learn,text_num,LinearSVC (SVM),0.915,0.622,0.782,0.692,0.822,0.938,1.7
+scikit-learn,text_num,RandomForest,0.925,0.755,0.568,0.648,0.803,0.936,6.5
+scikit-learn,text_num,LogisticRegression,0.895,0.548,0.835,0.662,0.8,0.944,1.8
+scikit-learn,text_num,DecisionTree,0.875,0.492,0.738,0.59,0.758,0.845,2.8
+scikit-learn,text_num,ComplementNB (+),0.897,1.0,0.155,0.269,0.607,0.927,1.8
+scikit-learn,text_num,KNN (cosine),0.887,1.0,0.073,0.136,0.538,0.695,2.5
+scikit-learn,text_only,LogisticRegression,0.867,0.469,0.626,0.536,0.73,0.88,1.9
+scikit-learn,text_only,LogisticRegression (tuned),0.875,0.49,0.573,0.528,0.728,0.877,
+scikit-learn,text_only,LinearSVC (SVM),0.875,0.489,0.558,0.522,0.725,0.873,1.7
+scikit-learn,text_only,DecisionTree,0.741,0.241,0.519,0.329,0.584,0.61,3.4
+scikit-learn,text_only,RandomForest,0.885,0.636,0.136,0.224,0.581,0.845,7.0
+scikit-learn,text_only,ComplementNB (+),0.876,0.478,0.107,0.175,0.554,0.841,1.7
+scikit-learn,text_only,KNN (cosine),0.881,0.667,0.049,0.09,0.513,0.784,2.2
