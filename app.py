@@ -6,8 +6,10 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import itviec_core as core
+import csv_io
 import ui
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -57,10 +59,12 @@ ss.setdefault("company", "FPT Software" if "FPT Software" in NAMES else NAMES[0]
 
 def go_company(name):
     ss.company, ss.nav = name, MENU[1]
+    ss._toast = ("🏢", f"Đã mở hồ sơ: {name}")
 
 
 def go_write(name):
     ss.write_company, ss.nav = name, MENU[3]
+    ss._toast = ("✍️", f"Viết review cho: {name}")
 
 
 # Từ đơn mang dấu hiệu cảm xúc trong model nhưng đứng riêng thì vô nghĩa khi hiển thị
@@ -88,17 +92,20 @@ def chips(words, cls):
     return "".join(f'<span class="it-chip {cls}">{escape(w.replace("_", " "))}</span>' for w in words)
 
 
-def mini_company(r, sim=None, key=""):
-    """Thẻ công ty thu gọn (cột công ty tương tự / kết quả tìm kiếm)."""
+def mini_company(r, sim=None, key="", desc=None):
+    """Thẻ công ty thu gọn — cả thẻ bấm được: 1 nút trong suốt phủ lên thẻ (CSS st-key-open_*)."""
     score = (f'{ui.stars(r["avg"], 14)} <span class="it-meta">{ui.vn(r["avg"])} · {r["n"]} review</span>'
              if r["n"] else '<span class="it-meta">chưa có review</span>')
     extra = f' · tương đồng {sim:.2f}' if sim is not None else ""
-    ui.html(f'<div style="display:flex;gap:10px;align-items:flex-start">'
-            f'<div class="it-logo" style="width:36px;height:36px;font-size:13px;border-radius:8px">'
-            f'{ui.logo_text(r["company_name"])}</div><div><div class="it-name">{escape(r["company_name"])}</div>'
-            f'<div>{score}</div><div class="it-meta">{escape(str(r["industry"] or ""))}{extra}</div></div></div>')
-    st.button("Xem hồ sơ →", key=f"mc_{key}_{r['id']}", on_click=go_company, args=(r["company_name"],),
-              type="tertiary")
+    body = f'<div class="it-meta" style="margin-top:8px">{escape(desc)}</div>' if desc else ""
+    with st.container(key=f"cc_{key}_{r['id']}"):
+        ui.html(f'<div class="it-ccard"><div style="display:flex;gap:10px;align-items:flex-start">'
+                f'<div class="it-logo" style="width:36px;height:36px;font-size:13px;border-radius:8px">'
+                f'{ui.logo_text(r["company_name"])}</div><div><div class="it-name">{escape(r["company_name"])}</div>'
+                f'<div>{score}</div><div class="it-meta">{escape(str(r["industry"] or ""))}{extra}</div></div></div>'
+                f'{body}</div>')
+        st.button(f"Xem hồ sơ {r['company_name']}", key=f"open_{key}_{r['id']}",
+                  on_click=go_company, args=(r["company_name"],))
 
 
 def explain(model, X, k=8):
@@ -151,7 +158,7 @@ if choice == MENU[0]:
     top = COMP[COMP.n >= 30].sort_values("avg", ascending=False).head(6)
     cols = st.columns(3)
     for i, (_, r) in enumerate(top.iterrows()):
-        with cols[i % 3], st.container(border=True):
+        with cols[i % 3]:
             mini_company(r, key="home")
 
 # ----------------------------------------------------------------------
@@ -236,9 +243,8 @@ elif choice == MENU[1]:
                     '<div class="it-meta">Gợi ý content-based (Gensim TF-IDF) từ mô tả công ty</div>',
                     unsafe_allow_html=True)
         i = NAMES.index(ss.company)
-        with st.container(border=True):
-            for j in core.top_k_indices(SIM[i], i, 6):
-                mini_company(COMP.iloc[j], float(SIM[i, j]), key="side")
+        for j in core.top_k_indices(SIM[i], i, 6):
+            mini_company(COMP.iloc[j], float(SIM[i, j]), key="side")
 
 # ----------------------------------------------------------------------
 elif choice == MENU[2]:
@@ -263,10 +269,10 @@ elif choice == MENU[2]:
             idx = core.top_k_indices(scores, None, k)
             cols = st.columns(3)
             for n, j in enumerate(idx):
-                with cols[n % 3], st.container(border=True):
+                with cols[n % 3]:
                     r = COMP.iloc[j]
-                    mini_company(r, float(scores[j]), key="search")
-                    st.caption(" ".join(str(r["overview"] or "").split())[:180] + "…")
+                    mini_company(r, float(scores[j]), key="search",
+                                 desc=" ".join(str(r["overview"] or "").split())[:180] + "…")
 
 # ----------------------------------------------------------------------
 elif choice == MENU[3]:
@@ -338,7 +344,8 @@ elif choice == MENU[3]:
             up = st.file_uploader("Chọn file CSV", type="csv")
             if up is not None:
                 try:
-                    df = pd.read_csv(up)
+                    df, enc, n_lost = csv_io.read_csv_any(up)
+                    csv_io.warn_encoding(st, enc, n_lost)
                     for c in ["title", "liked", "suggestion"]:
                         df[c] = df.get(c, pd.Series("", index=df.index)).fillna("").astype(str)
                     df[core.TEXT_COL] = (df["title"] + ". " + df["liked"] + ". " + df["suggestion"]).map(
@@ -400,3 +407,19 @@ else:
                 f'background:#e8eefc;color:#1f3f8f">{escape(ini)}</div><div><div class="it-name" style="font-size:1.15rem">'
                 f'{escape(m["ten"])}</div><div class="it-meta">📧 {escape(m["email"])}</div></div></div>'
                 f'<hr class="it-hr"><div class="it-txt"><b>Phụ trách:</b> {escape(m["viec"])}</div>')
+
+# ======================================================================
+# Phản hồi điều hướng: thông báo + cuộn lên đầu trang khi đổi trang / đổi công ty
+# ======================================================================
+if "_toast" in ss:
+    icon, msg = ss.pop("_toast")
+    st.toast(msg, icon=icon)
+view = (ss.nav, ss.company if ss.nav == MENU[1] else None)
+if ss.get("_last_view") != view:
+    ss._last_view = view
+    ss._scroll_n = ss.get("_scroll_n", 0) + 1     # nội dung khác nhau mỗi lần -> script chạy lại
+    components.html(
+        f"<script>/* {ss._scroll_n} */ const d = window.parent.document;"
+        "for (const s of ['[data-testid=\"stMain\"]', '[data-testid=\"stAppViewContainer\"]', 'section.main']) {"
+        "  const el = d.querySelector(s); if (el) el.scrollTo({top: 0, behavior: 'smooth'}); }"
+        "window.parent.scrollTo({top: 0, behavior: 'smooth'});</script>", height=0)
