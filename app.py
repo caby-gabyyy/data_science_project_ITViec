@@ -50,6 +50,12 @@ NAMES = COMP["company_name"].tolist()
 COEF = BT2["coef_text_only"]
 SIM = BT1["sims"][core.DEFAULT_METHOD]
 
+
+@st.cache_resource(show_spinner=False)
+def load_lexicon():
+    """Từ điển âm tiết tiếng Việt (từ review + tên công ty) để khôi phục chữ bị mất dấu trong file upload."""
+    return csv_io.build_lexicon(pd.concat([REV.title, REV.liked, REV.suggestion, COMP.company_name]).fillna(""))
+
 MENU = ["🏠 Trang chủ", "🏢 Hồ sơ công ty", "🔎 Tìm công ty", "✍️ Viết review",
         "📊 Dữ liệu & mô hình", "👥 Nhóm thực hiện"]
 ss = st.session_state
@@ -336,16 +342,18 @@ elif choice == MENU[3]:
                     '<b>LogisticRegression</b> chỉ đọc văn bản.<br>'
                     '3. Biểu đồ cho biết từ / điểm số nào kéo kết quả về mỗi phía.</div>')
 
-        with st.expander("📄 Dự đoán hàng loạt từ file CSV"):
+        with st.expander("📄 Dự đoán hàng loạt từ file CSV / Excel"):
             st.caption("Cột `title`, `liked`, `suggestion`; có đủ 6 cột điểm "
                        f"`{', '.join(core.NUM_FEATURES)}` thì dùng model text + điểm.")
+            d1, d2 = st.columns(2)
+            with open(P("data", "sample_reviews.xlsx"), "rb") as f:
+                d1.download_button("⬇️ File mẫu Excel", f, "sample_reviews.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             with open(P("data", "sample_reviews.csv"), "rb") as f:
-                st.download_button("⬇️ Tải file mẫu", f, "sample_reviews.csv", "text/csv")
-            up = st.file_uploader("Chọn file CSV", type="csv")
+                d2.download_button("⬇️ File mẫu CSV", f, "sample_reviews.csv", "text/csv")
+            up = st.file_uploader("Chọn file CSV hoặc Excel (.xlsx)", type=["csv", "xlsx"])
             if up is not None:
                 try:
-                    df, enc, n_lost = csv_io.read_csv_any(up)
-                    csv_io.warn_encoding(st, enc, n_lost)
+                    df = csv_io.load_upload(st, up, load_lexicon())
                     for c in ["title", "liked", "suggestion"]:
                         df[c] = df.get(c, pd.Series("", index=df.index)).fillna("").astype(str)
                     df[core.TEXT_COL] = (df["title"] + ". " + df["liked"] + ". " + df["suggestion"]).map(
