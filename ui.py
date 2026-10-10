@@ -55,6 +55,22 @@ CSS = """
 .it-kpi{font-size:.85rem;color:var(--muted)}
 .it-kpi b{display:block;font-size:1.35rem;color:var(--ink);margin-top:2px}
 .it-team{font-size:.85rem;line-height:1.45}
+.it-ccard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+/* Phản hồi khi đang tải: thanh xanh chạy ở đầu trang + nội dung cũ mờ đi */
+.stApp[data-test-script-state="running"]::before{content:"";position:fixed;top:0;left:0;height:4px;width:40%;
+  z-index:1000000;border-radius:0 4px 4px 0;background:linear-gradient(90deg,#4b8df8,#1f6feb);
+  animation:it-load .9s ease-in-out infinite}
+@keyframes it-load{0%{left:-40%}100%{left:100%}}
+.stApp[data-test-script-state="running"] [data-stale="true"]{opacity:.45;transition:opacity .15s}
+/* Cả thẻ công ty bấm được: nút trong suốt phủ kín thẻ; nổi lên khi rê chuột, lún xuống khi nhấn */
+[class*="st-key-cc_"]{position:relative}
+[class*="st-key-cc_"] .it-ccard{transition:box-shadow .15s ease,transform .15s ease}
+[class*="st-key-cc_"]:hover .it-ccard{box-shadow:0 6px 18px rgba(0,0,0,.10);transform:translateY(-2px)}
+[class*="st-key-cc_"]:hover .it-name{color:var(--link)}
+[class*="st-key-cc_"]:active .it-ccard{transform:scale(.97);border-color:var(--link);box-shadow:0 2px 6px rgba(31,111,235,.3)}
+[class*="st-key-open_"]{position:absolute !important;inset:0;z-index:5;width:100% !important;margin:0 !important}
+[class*="st-key-open_"] div[data-testid="stButton"],[class*="st-key-open_"] button{width:100% !important;
+  height:100% !important;min-height:100%;opacity:0;cursor:pointer;padding:0;border:0}
 </style>
 """
 
@@ -160,11 +176,16 @@ def review_card(r, idx=0, show_company=False):
     pred_yes = r.get("pred") == 1
     ok = pred_yes == yes
     reply = ""
-    if "pred" in r and pd.notna(r["pred"]):
+    if r.get("_split") == "test" and "pred" in r and pd.notna(r["pred"]):
+        # Chỉ hiện ✅/❌ cho review thuộc tập test (mô hình chưa từng thấy); review train bị "học thuộc" nên không phản ánh chất lượng thật
         reply = (f'<div class="it-reply"><div class="who">🤖 Mô hình Recommend or Not</div>'
                  f'Dự đoán: <b>{"Recommend" if pred_yes else "Không recommend"}</b> — '
                  f'{"✅ khớp" if ok else "❌ khác"} với lựa chọn thật của người viết'
-                 f'{" · <span class=it-meta>review thuộc tập test</span>" if r.get("_split") == "test" else ""}</div>')
+                 f' · <span class=it-meta>review thuộc tập test (mô hình chưa thấy khi huấn luyện)</span></div>')
+    elif "pred" in r and pd.notna(r["pred"]):
+        reply = ('<div class="it-reply"><div class="who">🤖 Mô hình Recommend or Not</div>'
+                 '<span class=it-meta>Review này nằm trong tập huấn luyện nên không dùng để minh hoạ độ chính xác. '
+                 'Dùng trang “Viết review” để thử review mới.</span></div>')
     card(f'<div class="it-top"><div class="it-ava" style="background:{AVA_COLORS[k]};color:{AVA_TEXT[k]}">'
          f'{"NV" if not show_company else logo_text(r["company_name"])}</div><div>'
          f'<div class="it-name">{who}</div><div class="it-meta">{date}</div></div></div>'

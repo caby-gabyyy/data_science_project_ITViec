@@ -133,6 +133,7 @@ st.sidebar.radio("Menu", MENU, key="nav", label_visibility="collapsed")
 st.sidebar.divider()
 ui.team_sidebar(TEAM)
 st.sidebar.caption("Đồ án tốt nghiệp Data Science — TTTH ĐH KHTN")
+st.sidebar.caption("Sản phẩm học tập, không phải website chính thức của ITViec. Kết quả mô hình chỉ mang tính tham khảo.")
 choice = ss.nav
 
 # ----------------------------------------------------------------------
@@ -144,7 +145,7 @@ if choice == MENU[0]:
             f'<span class="it-meta">điểm trung bình toàn bộ review · {REV["recommend"].mean():.0%} recommend</span>'
             '</div></div></div>')
     mn, mo = BT2["metrics"]["text_num"], BT2["metrics"]["text_only"]
-    ui.kpis([("Gợi ý cùng lĩnh vực (P@5)", "23,5%"),
+    ui.kpis([("Gợi ý cùng lĩnh vực (P@5) · ngẫu nhiên 13%", "23,5%"),
              ("F1-macro · text + điểm", ui.vn(mn["F1_macro"], 3)),
              ("F1-macro · chỉ text", ui.vn(mo["F1_macro"], 3)),
              ("Bắt được review “No”", f"{mn['Recall_No']:.0%}")])
@@ -395,9 +396,19 @@ elif choice == MENU[4]:
 Hai kịch bản: **text_num** (nội dung review + 6 điểm số, khớp form thật của ITViec) và **text_only** (chỉ nội dung).
 Thước đo chính là **F1-macro** và **Recall lớp No** vì dữ liệu lệch 88/12.
 Model triển khai: **LinearSVC** (text_num) và **LogisticRegression** (text_only).
-PySpark tốt nhất: LogisticRegression — F1-macro 0,795 (text_num) và 0,720 (text_only).
+PySpark (chạy trong notebook, không nằm trong bảng bên dưới): LogisticRegression tốt nhất — F1-macro 0,795 (text_num) và 0,720 (text_only). Lưu ý: F1-macro của Spark và sklearn có thể tính hơi khác nhau nên chỉ so sánh tương đối.
 """)
         st.dataframe(pd.read_csv(P("data", "bang_so_sanh_model_bt2.csv")).round(3), width="stretch", hide_index=True)
+        st.markdown("**Mốc so sánh & kiểm tra độ tin cậy** (tính lại trên cùng tập test 1.683 review; 88% review là Recommend)")
+        st.dataframe(pd.DataFrame([
+            ["Luôn đoán “Recommend”", "0,878", "0,467", "0%", "Accuracy 88% nhưng không bắt được review No nào"],
+            ["Chỉ 6 điểm số (không text)", "0,844", "0,743", "89%", "Precision No chỉ 43% — nhiều báo động giả"],
+            ["Chỉ text (LogisticRegression)", "0,867", "0,730", "63%", "Mô hình triển khai cho text_only"],
+            ["Text + 6 điểm số (LinearSVC)", "0,915", "0,822", "78%", "Mô hình triển khai chính"],
+            ["Text + điểm số — chia theo công ty (5 lần)", "—", "0,842", "79%", "±0,040; không thấp hơn chia ngẫu nhiên 5 lần (0,830) → không thấy dấu hiệu học thuộc công ty"],
+        ], columns=["Mô hình / kiểm tra", "Accuracy", "F1-macro", "Recall No", "Ghi chú"]),
+            width="stretch", hide_index=True)
+        st.caption("Điểm số riêng đã đạt F1-macro 0,743; text giúp thêm ~0,08. Dùng F1-macro / Recall No, không dùng Accuracy.")
         st.image(P("images", "bang_so_sanh_model_bt2.png"))
         st.image(P("images", "bt2_confusion_roc.png"), caption="Confusion matrix + ROC")
         st.markdown("**Xử lý mất cân bằng** (LogisticRegression, text_only)")
