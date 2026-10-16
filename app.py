@@ -267,7 +267,7 @@ elif choice == MENU[2]:
                 unsafe_allow_html=True)
     st.write("")
     ex = ["Outsourcing Java cho khách hàng Nhật Bản",
-          "Fintech, mobile banking, React Native",
+          "Fintech, mobile banking, payment",
           "Game mobile Unity C#"]
     ss.setdefault("q_search", ex[0])
 
@@ -282,7 +282,10 @@ elif choice == MENU[2]:
     c1, c2, _ = st.columns([1.3, 1, 2.2])
     cities = (COMP["cities"].dropna().str.split("|").explode().str.strip()
               .loc[lambda s: s != ""].value_counts().index.tolist())
-    city = c1.selectbox("Thành phố", ["Mọi thành phố"] + cities, label_visibility="collapsed")
+    city_vn = {"Others": "Thành phố khác", "Hue": "Huế", "Binh Dinh": "Bình Định", "Binh Duong": "Bình Dương",
+               "Can Tho": "Cần Thơ", "Hai Phong": "Hải Phòng", "Nha Trang": "Nha Trang", "Vung Tau": "Vũng Tàu"}
+    city = c1.selectbox("Thành phố", ["Mọi thành phố"] + cities, label_visibility="collapsed",
+                        format_func=lambda c: city_vn.get(c, c))
     with c2.popover("⚙️ Tuỳ chọn", width="stretch"):
         method = st.selectbox("Cách so khớp", core.METHODS, help="Mặc định là cách cho kết quả tốt nhất khi nhóm đánh giá.")
         k = st.select_slider("Số kết quả", [6, 9, 12], 6)
@@ -297,9 +300,10 @@ elif choice == MENU[2]:
                        COMP["cities"].fillna("").str.split("|").apply(lambda xs: city in [x.strip() for x in xs]).values)
             idx = [j for j in np.argsort(-scores) if scores[j] > 0 and in_city[j]][:k]
             if not idx:
-                st.info(f"Không có công ty phù hợp ở {city}. Thử chọn “Mọi thành phố”.")
+                st.info(f"Không có công ty phù hợp ở {city_vn.get(city, city)}. Thử chọn “Mọi thành phố”.")
             else:
-                ui.html(f'<div class="it-meta" style="margin:4px 0 12px">Tìm theo {chips(terms, "it-info")}'
+                shown = [{"csharp": "c#", "cplusplus": "c++", "dotnet": ".net"}.get(t, t) for t in terms]
+                ui.html(f'<div class="it-meta" style="margin:4px 0 12px">Tìm theo {chips(shown, "it-info")}'
                         f' · {len(idx)} công ty phù hợp nhất</div>')
                 cols = st.columns(3)
                 for n, j in enumerate(idx):
