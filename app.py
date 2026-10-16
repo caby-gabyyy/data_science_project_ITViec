@@ -98,12 +98,19 @@ def chips(words, cls):
     return "".join(f'<span class="it-chip {cls}">{escape(w.replace("_", " "))}</span>' for w in words)
 
 
-def mini_company(r, sim=None, key="", desc=None):
+def short(text, n=140):
+    """Cắt mô tả gọn ở ranh giới từ."""
+    t = " ".join(text.split()) if isinstance(text, str) else ""
+    return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + "…"
+
+
+def mini_company(r, sim=None, key="", desc=None, tags=None):
     """Thẻ công ty thu gọn — cả thẻ bấm được: 1 nút trong suốt phủ lên thẻ (CSS st-key-open_*)."""
     score = (f'{ui.stars(r["avg"], 14)} <span class="it-meta">{ui.vn(r["avg"])} · {r["n"]} review</span>'
              if r["n"] else '<span class="it-meta">chưa có review</span>')
     extra = f' · tương đồng {sim:.2f}' if sim is not None else ""
-    body = f'<div class="it-meta" style="margin-top:8px">{escape(desc)}</div>' if desc else ""
+    body = f'<div style="margin-top:8px">{chips(tags, "it-pos")}</div>' if tags else ""
+    body += f'<div class="it-meta" style="margin-top:8px">{escape(desc)}</div>' if desc else ""
     with st.container(key=f"cc_{key}_{r['id']}"):
         ui.html(f'<div class="it-ccard"><div style="display:flex;gap:10px;align-items:flex-start">'
                 f'<div class="it-logo" style="width:36px;height:36px;font-size:13px;border-radius:8px">'
@@ -255,31 +262,53 @@ elif choice == MENU[1]:
 
 # ----------------------------------------------------------------------
 elif choice == MENU[2]:
-    st.markdown('<div class="it-title">Tìm công ty phù hợp với bạn</div>'
-                '<div class="it-sub">Gõ mô tả công việc / công ty mong muốn (tiếng Việt hoặc tiếng Anh) — '
-                'hệ thống tìm công ty có mô tả gần nhất.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="it-title">Tìm công ty phù hợp</div>'
+                '<div class="it-sub">Bạn muốn làm gì, ở đâu? Gõ công nghệ, lĩnh vực hoặc khách hàng.</div>',
+                unsafe_allow_html=True)
     st.write("")
-    c1, c2, c3 = st.columns([3, 1.3, 1])
-    ex = ["Công ty outsourcing Java cho khách hàng Nhật Bản",
-          "fintech mobile banking app, React Native, payment",
-          "game studio Unity C# mobile games"]
-    q = c1.text_input("Mô tả", value=ex[0], label_visibility="collapsed")
-    method = c2.selectbox("Phương pháp", core.METHODS, label_visibility="collapsed")
-    k = c3.selectbox("Số kết quả", [6, 9, 12], label_visibility="collapsed")
-    st.caption("Ví dụ: " + " · ".join(f"`{e}`" for e in ex))
+    ex = ["Outsourcing Java cho khách hàng Nhật Bản",
+          "Fintech, mobile banking, React Native",
+          "Game mobile Unity C#"]
+    ss.setdefault("q_search", ex[0])
+
+    def _pick_example():
+        if ss.ex_pick:
+            ss.q_search, ss.ex_pick = ss.ex_pick, None    # chip hoạt động như nút bấm
+
+    q = st.text_input("Tìm công ty", key="q_search", label_visibility="collapsed",
+                      placeholder="🔎  Ví dụ: Python, data, ngân hàng, làm remote…")
+    st.pills("Thử nhanh", ex, key="ex_pick", on_change=_pick_example)
+
+    c1, c2, _ = st.columns([1.3, 1, 2.2])
+    cities = (COMP["cities"].dropna().str.split("|").explode().str.strip()
+              .loc[lambda s: s != ""].value_counts().index.tolist())
+    city = c1.selectbox("Thành phố", ["Mọi thành phố"] + cities, label_visibility="collapsed")
+    with c2.popover("⚙️ Tuỳ chọn", width="stretch"):
+        method = st.selectbox("Cách so khớp", core.METHODS, help="Mặc định là cách cho kết quả tốt nhất khi nhóm đánh giá.")
+        k = st.select_slider("Số kết quả", [6, 9, 12], 6)
+
     if q.strip():
         scores, q_clean = core.query_scores(BT1, q, method)
         if not q_clean or scores.max() <= 0:
-            st.warning("Không có từ khoá nào khớp dữ liệu — thử mô tả cụ thể hơn (công nghệ, lĩnh vực, thị trường…).")
+            st.info("Chưa tìm thấy công ty phù hợp. Thử gõ cụ thể hơn, ví dụ “Java”, “fintech”, “game”.")
         else:
-            st.caption(f"Từ khoá sau làm sạch: `{q_clean}`")
-            idx = core.top_k_indices(scores, None, k)
-            cols = st.columns(3)
-            for n, j in enumerate(idx):
-                with cols[n % 3]:
-                    r = COMP.iloc[j]
-                    mini_company(r, float(scores[j]), key="search",
-                                 desc=" ".join(str(r["overview"] or "").split())[:180] + "…")
+            terms = [t for t in dict.fromkeys(q_clean.split()) if t not in {"công_ty", "company"}]
+            in_city = (np.ones(len(COMP), bool) if city == "Mọi thành phố" else
+                       COMP["cities"].fillna("").str.split("|").apply(lambda xs: city in [x.strip() for x in xs]).values)
+            idx = [j for j in np.argsort(-scores) if scores[j] > 0 and in_city[j]][:k]
+            if not idx:
+                st.info(f"Không có công ty phù hợp ở {city}. Thử chọn “Mọi thành phố”.")
+            else:
+                ui.html(f'<div class="it-meta" style="margin:4px 0 12px">Tìm theo {chips(terms, "it-info")}'
+                        f' · {len(idx)} công ty phù hợp nhất</div>')
+                cols = st.columns(3)
+                for n, j in enumerate(idx):
+                    with cols[n % 3]:
+                        r = COMP.iloc[j]
+                        text = " ".join(str(r[c]) for c in ["company_name", "overview", "key_skills"]
+                                        if isinstance(r[c], str)).lower()
+                        hit = [t for t in terms if t.replace("_", " ") in text][:4]
+                        mini_company(r, key="search", tags=hit, desc=short(r["overview"]))
 
 # ----------------------------------------------------------------------
 elif choice == MENU[3]:
