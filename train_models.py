@@ -16,12 +16,11 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (accuracy_score, f1_score, precision_score, recall_score,
-                             roc_auc_score)
+from sklearn.metrics import (accuracy_score, average_precision_score, f1_score, precision_score,
+                             recall_score, roc_auc_score)
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.svm import LinearSVC
 
 import itviec_core as core
 
@@ -86,25 +85,29 @@ def make_pre(scenario):
     return ColumnTransformer(parts)
 
 
-# Model triển khai đã chọn ở Mục 10 notebook (quy tắc: nhóm ngang F1 -> Recall_No cao nhất)
-DEPLOY = {"text_num": ("LinearSVC (SVM)", LinearSVC(C=0.5, class_weight="balanced")),
-          "text_only": ("LogisticRegression",
-                        LogisticRegression(max_iter=3000, C=2.0, class_weight="balanced"))}
+# Model triển khai theo notebook v5 mục 10.4: chọn theo PR-AUC lớp No out-of-fold trên train
+# (text_num: LogisticRegression 0,802 > LinearSVC 0,787 > LightGBM 0,783; text_only: hoà -> ưu tiên LogisticRegression).
+# Ngưỡng chọn trên out-of-fold của train (tối đa F1-macro); giá trị lấy đúng từ lần chạy notebook v5.
+DEPLOY = {"text_num": ("LogisticRegression", LogisticRegression(max_iter=3000, C=2.0, class_weight="balanced")),
+          "text_only": ("LogisticRegression", LogisticRegression(max_iter=3000, C=2.0, class_weight="balanced"))}
+THRESHOLDS = {"text_num": 0.199, "text_only": 0.476}
 
 
 def train_bt2():
     df = pd.read_parquet(os.path.join(SRC, "df_model_bt2.parquet"))
     tr, te = df[df["_split"] == "train"], df[df["_split"] == "test"]
-    out = {"models": {}, "metrics": {}}
+    out = {"models": {}, "metrics": {}, "thresholds": dict(THRESHOLDS)}
     for scen, (name, est) in DEPLOY.items():
         pipe = Pipeline([("pre", make_pre(scen)), ("clf", est)]).fit(tr, tr[core.TARGET])
-        y, pred, score = te[core.TARGET].values, pipe.predict(te), core.get_score(pipe, te)
+        y, score = te[core.TARGET].values, core.get_score(pipe, te)
+        pred = (score > THRESHOLDS[scen]).astype(int)
         m = {"Accuracy": accuracy_score(y, pred),
              "Precision_No": precision_score(y, pred, pos_label=0),
              "Recall_No": recall_score(y, pred, pos_label=0),
              "F1_macro": f1_score(y, pred, average="macro"),
-             "ROC_AUC": roc_auc_score(y, score)}
-        print(f"  BT2 {scen:9s} {name:20s} " + " ".join(f"{k}={v:.3f}" for k, v in m.items()))
+             "ROC_AUC": roc_auc_score(y, score),
+             "PR_AUC_No": average_precision_score(1 - y, -score)}
+        print(f"  BT2 {scen:9s} {name:20s} ngưỡng {THRESHOLDS[scen]} " + " ".join(f"{k}={v:.3f}" for k, v in m.items()))
         out["models"][scen] = pipe
         out["metrics"][scen] = {"model": name, **m}
 
@@ -121,7 +124,7 @@ def train_bt2():
     rev = pd.read_parquet(os.path.join(SRC, "df_reviews_clean.parquet"))
     assert len(rev) == len(df) and (rev["recommend"].values == df["recommend"].values).all()
     rev["_split"] = df["_split"].values
-    rev["pred"] = out["models"]["text_num"].predict(df).astype(int)
+    rev["pred"] = (core.get_score(out["models"]["text_num"], df) > THRESHOLDS["text_num"]).astype(int)
     keep = ["id", "company_name", "cmt_date", "title", "liked", "suggestion", *core.NUM_FEATURES,
             "recommend", "text_clean", "_split", "pred"]
     rev[keep].to_parquet(os.path.join(HERE, "data", "reviews.parquet"), index=False)

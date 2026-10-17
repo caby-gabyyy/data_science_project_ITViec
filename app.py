@@ -132,6 +132,13 @@ def explain(model, X, k=8):
     return contrib.nsmallest(k), contrib.nlargest(k)
 
 
+def bt2_predict(scen, X):
+    """Dự đoán bằng ngưỡng chọn trên out-of-fold (notebook v5 mục 10.4): điểm > ngưỡng là Recommend."""
+    score = core.get_score(BT2["models"][scen], X)
+    thr = BT2["thresholds"][scen]
+    return score > thr, score, thr
+
+
 # ======================================================================
 # Sidebar
 # ======================================================================
@@ -152,10 +159,10 @@ if choice == MENU[0]:
             f'<span class="it-meta">điểm trung bình toàn bộ review · {REV["recommend"].mean():.0%} recommend</span>'
             '</div></div></div>')
     mn, mo = BT2["metrics"]["text_num"], BT2["metrics"]["text_only"]
-    ui.kpis([("Gợi ý cùng lĩnh vực (P@5) · ngẫu nhiên 13%", "23,5%"),
+    ui.kpis([("Gợi ý cùng lĩnh vực · P@5 macro (ngẫu nhiên 0,027)", "0,092"),
              ("F1-macro · text + điểm", ui.vn(mn["F1_macro"], 3)),
-             ("F1-macro · chỉ text", ui.vn(mo["F1_macro"], 3)),
-             ("Bắt được review “No”", f"{mn['Recall_No']:.0%}")])
+             ("F1-macro · chỉ text (mốc 0,467)", ui.vn(mo["F1_macro"], 3)),
+             ("Cảnh báo “No” đúng", f"{mn['Precision_No']:.0%}")])
     c1, c2 = st.columns(2)
     with c1:
         ui.card('<div class="it-h">🔎 Bài toán 1 — Content-Based Company Similarity</div>'
@@ -165,8 +172,8 @@ if choice == MENU[0]:
     with c2:
         ui.card('<div class="it-h">👍👎 Bài toán 2 — Recommend or Not</div>'
                 '<div class="it-txt">Từ nội dung review (+ 6 điểm số), dự đoán người viết có <b>recommend</b> công ty '
-                'không. Dữ liệu lệch 88/12 → đo bằng F1-macro & Recall lớp No. Triển khai <b>LinearSVC</b> '
-                '(text + điểm) và <b>LogisticRegression</b> (chỉ text).</div>')
+                'không. Dữ liệu lệch 88/12 → đo bằng F1-macro & Recall lớp No. Triển khai <b>LogisticRegression</b> '
+                'cho cả hai kịch bản (chọn theo PR-AUC out-of-fold), ngưỡng quyết định chọn trên out-of-fold của train.</div>')
 
     st.markdown('<div class="it-h">Công ty được đánh giá cao (≥ 30 review)</div>', unsafe_allow_html=True)
     top = COMP[COMP.n >= 30].sort_values("avg", ascending=False).head(6)
@@ -345,10 +352,10 @@ elif choice == MENU[3]:
                 row.update({"rating": float(rating), **{c: float(v) for c, v in ratings.items()}})
             X = pd.DataFrame([row])
             model = BT2["models"][scen]
-            yes = int(model.predict(X)[0]) == 1
-            score = float(core.get_score(model, X)[0])
-            prob = (f"xác suất recommend <b>{score:.0%}</b>" if hasattr(model, "predict_proba")
-                    else f"điểm quyết định <b>{score:+.2f}</b> (&gt; 0 là recommend)")
+            yes_arr, sc_arr, thr = bt2_predict(scen, X)
+            yes, score = bool(yes_arr[0]), float(sc_arr[0])
+            prob = (f"điểm recommend <b>{score:.2f}</b> (ngưỡng {thr:.2f}; "
+                    f"điểm xếp hạng, chưa phải xác suất)")
             preview = pd.Series({"company_name": company, "cmt_date": pd.Timestamp.today(), "title": title,
                                  "liked": liked, "suggestion": sugg, "rating": rating,
                                  "recommend": int(yes), **ratings})
@@ -372,8 +379,9 @@ elif choice == MENU[3]:
             ui.card('<div class="it-h">Cách hoạt động</div><div class="it-txt">'
                     '1. Văn bản được chuẩn hoá: teencode (ko → không, cty → công ty), thuật ngữ IT (C# → csharp), '
                     'tách từ tiếng Việt bằng pyvi, giữ lại từ phủ định.<br>'
-                    '2. TF-IDF (từ đơn + cụm 2 từ) + 6 điểm số → <b>LinearSVC</b>; tắt chấm điểm → '
-                    '<b>LogisticRegression</b> chỉ đọc văn bản.<br>'
+                    '2. TF-IDF (từ đơn + cụm 2 từ) + 6 điểm số → <b>LogisticRegression</b>; tắt chấm điểm → '
+                    'LogisticRegression chỉ đọc văn bản. Điểm dưới ngưỡng (chọn trên out-of-fold của train) '
+                    'là Không recommend.<br>'
                     '3. Biểu đồ cho biết từ / điểm số nào kéo kết quả về mỗi phía.</div>')
 
         with st.expander("📄 Dự đoán hàng loạt từ file CSV / Excel"):
@@ -394,9 +402,9 @@ elif choice == MENU[3]:
                         lambda s: core.clean_text(s, core.STOP_BT2))
                     has_num = set(core.NUM_FEATURES).issubset(df.columns) and df[core.NUM_FEATURES].notna().all().all()
                     scen = "text_num" if has_num else "text_only"
-                    model = BT2["models"][scen]
-                    df["du_doan"] = np.where(model.predict(df) == 1, "Recommend", "Not recommend")
-                    df["diem"] = np.round(core.get_score(model, df), 3)
+                    yes_arr, sc_arr, _ = bt2_predict(scen, df)
+                    df["du_doan"] = np.where(yes_arr, "Recommend", "Not recommend")
+                    df["diem"] = np.round(sc_arr, 3)
                     st.write(f"Model **{BT2['metrics'][scen]['model']}** ({scen}) · {len(df)} review · "
                              f"{(df['du_doan'] == 'Not recommend').sum()} Not recommend")
                     show = ["title", "liked", "suggestion", *(core.NUM_FEATURES if has_num else []), "du_doan", "diem"]
@@ -414,7 +422,7 @@ elif choice == MENU[4]:
         st.image(P("images", "eda_companies.png"), caption="Chân dung 478 công ty")
         st.image(P("images", "eda_company_ratings.png"), caption="Điểm đánh giá cấp công ty")
         st.image(P("images", "eda_reviews_label.png"),
-                 caption="Nhãn Recommend lệch 88/12 — Rating gần như quyết định nhãn")
+                 caption="Nhãn Recommend lệch 88/12 — chỉ riêng luật “Rating ≤ 2 thì No” đã đạt F1-macro 0,825")
         st.image(P("images", "eda_reviews_company_time.png"), caption="FPT Software chiếm ~24% review")
         st.image(P("images", "wordcloud_companies.png"), caption="Wordcloud mô tả công ty")
         st.image(P("images", "wordcloud_reviews_yes_no.png"), caption="Từ đặc trưng review Yes vs No")
@@ -423,25 +431,36 @@ elif choice == MENU[4]:
                     "trong 5 công ty được gợi ý, bao nhiêu % cùng ngành với công ty gốc "
                     "(ngành **không** nằm trong văn bản đưa vào model). Chọn **Gensim TF-IDF**.")
         st.dataframe(pd.read_csv(P("data", "bt1_so_sanh_phuong_phap.csv")), width="stretch", hide_index=True)
+        st.markdown("**Mốc mạnh hơn: luôn gợi ý nhóm phổ biến nhất.** Ngành lớn nhất chiếm 23,1% nên cách đoán này đã đạt "
+                    "P@5 (micro) 0,231 — ngang các phương pháp. Vì vậy so bằng **P@5 macro** (trung bình trong từng "
+                    "ngành rồi mới lấy trung bình giữa 33 ngành): Gensim TF-IDF 0,092, ngẫu nhiên 0,027, nhóm phổ biến 0,030. "
+                    "Bootstrap ghép cặp: Gensim TF-IDF hơn TF-IDF sklearn thật (+0,031), ngang Gensim LSI (+0,013, trong nhiễu).")
+        st.dataframe(pd.read_csv(P("data", "bt1_baseline_macro.csv")), width="stretch", hide_index=True)
         st.image(P("images", "bt1_danh_gia.png"))
     with t3:
         st.markdown("""
 Hai kịch bản: **text_num** (nội dung review + 6 điểm số, khớp form thật của ITViec) và **text_only** (chỉ nội dung).
 Thước đo chính là **F1-macro** và **Recall lớp No** vì dữ liệu lệch 88/12.
-Model triển khai: **LinearSVC** (text_num) và **LogisticRegression** (text_only).
-PySpark (chạy trong notebook, không nằm trong bảng bên dưới): LogisticRegression tốt nhất — F1-macro 0,795 (text_num) và 0,720 (text_only). Lưu ý: F1-macro của Spark và sklearn có thể tính hơi khác nhau nên chỉ so sánh tương đối.
+Bảng dưới gồm 13 cấu hình scikit-learn và PySpark trên cùng tập test 1.683 review (tập test khoá bằng cột `_split`, Spark chỉ lọc theo cột này), ở ngưỡng mặc định.
+
+**Chọn model triển khai** (mọi lựa chọn làm trên tập train, tập test chỉ để báo cáo): lấy dự đoán out-of-fold 5-fold của mọi model scikit-learn, chọn PR-AUC lớp No cao nhất. text_num: **LogisticRegression** 0,802 > LinearSVC 0,787 > LightGBM 0,783. text_only: LogisticRegression 0,493, hoà LinearSVC 0,488 → ưu tiên LogisticRegression (giải thích được bằng hệ số). Ngưỡng quyết định cũng chọn trên out-of-fold (tối đa F1-macro): 0,199 (text_num) và 0,476 (text_only).
+
+PySpark tốt nhất: LogisticRegression — F1-macro 0,795 (text_num), 0,720 (text_only).
 """)
         st.dataframe(pd.read_csv(P("data", "bang_so_sanh_model_bt2.csv")).round(3), width="stretch", hide_index=True)
-        st.markdown("**Mốc so sánh & kiểm tra độ tin cậy** (tính lại trên cùng tập test 1.683 review; 88% review là Recommend)")
+        mn, mo = BT2["metrics"]["text_num"], BT2["metrics"]["text_only"]
+        st.markdown("**Model triển khai, với ngưỡng đã chọn** (tập test)")
         st.dataframe(pd.DataFrame([
-            ["Luôn đoán “Recommend”", "0,878", "0,467", "0%", "Accuracy 88% nhưng không bắt được review No nào"],
-            ["Chỉ 6 điểm số (không text)", "0,844", "0,743", "89%", "Precision No chỉ 43% — nhiều báo động giả"],
-            ["Chỉ text (LogisticRegression)", "0,867", "0,730", "63%", "Mô hình triển khai cho text_only"],
-            ["Text + 6 điểm số (LinearSVC)", "0,915", "0,822", "78%", "Mô hình triển khai chính"],
-            ["Text + điểm số — chia theo công ty (5 lần)", "—", "0,842", "79%", "±0,040; không thấp hơn chia ngẫu nhiên 5 lần (0,830) → không thấy dấu hiệu học thuộc công ty"],
-        ], columns=["Mô hình / kiểm tra", "Accuracy", "F1-macro", "Recall No", "Ghi chú"]),
+            [s, f"{BT2['thresholds'][s]:.3f}", round(m["Accuracy"], 3), round(m["Precision_No"], 3),
+             round(m["Recall_No"], 3), round(m["F1_macro"], 3), round(m["PR_AUC_No"], 3)]
+            for s, m in [("text_num", mn), ("text_only", mo)]],
+            columns=["Kịch bản", "Ngưỡng", "Accuracy", "Precision_No", "Recall_No", "F1_macro", "PR_AUC_No"]),
             width="stretch", hide_index=True)
-        st.caption("Điểm số riêng đã đạt F1-macro 0,743; text giúp thêm ~0,08. Dùng F1-macro / Recall No, không dùng Accuracy.")
+        st.markdown("**Mốc so sánh** (cùng tập test)")
+        st.dataframe(pd.read_csv(P("data", "bt2_baseline.csv")), width="stretch", hide_index=True)
+        st.caption("Luật một dòng “Rating ≤ 2 thì No” đạt F1-macro 0,825, ngang model text_num ở ngưỡng mặc định: khi có điểm số, "
+                   "Rating gần như quyết định nhãn. Giá trị của NLP nằm ở kịch bản chỉ văn bản (0,730 so với mốc 0,467). "
+                   "Kiểm theo thời gian (train ≤ 2023, test ≥ 2024): text_only Recall No giảm từ 0,626 xuống 0,397 → cần huấn luyện lại định kỳ.")
         st.image(P("images", "bang_so_sanh_model_bt2.png"))
         st.image(P("images", "bt2_confusion_roc.png"), caption="Confusion matrix + ROC")
         st.markdown("**Xử lý mất cân bằng** (LogisticRegression, text_only)")
