@@ -1,0 +1,7 @@
+﻿Phương pháp,P@5 lĩnh vực (micro),P@5 lĩnh vực (macro),P@5 loại hình (micro),P@5 loại hình (macro)
+TF-IDF + cosine (sklearn),0.204,0.071,0.489,0.342
+Gensim TF-IDF,0.235,0.092,0.483,0.329
+Gensim LSI (+),0.222,0.091,0.504,0.349
+"SBERT đa ngữ (+, chỉ notebook)",0.202,0.08,0.441,0.317
+Ngẫu nhiên,0.13,0.027,0.436,0.248
+Luôn gợi ý nhóm phổ biến nhất,0.231,0.03,0.617,0.25

@@ -1,0 +1,5 @@
+﻿Mốc so sánh,Kịch bản,Accuracy,Precision_No,Recall_No,F1_macro
+Dummy: luôn đoán Yes,cả hai,0.878,0.0,0.0,0.467
+Dummy: đoán theo tỉ lệ lớp,cả hai,0.78,0.113,0.117,0.494
+Luật: Rating ≤ 2 thì No,text_num,0.939,0.948,0.534,0.825
+Luật: Rating ≤ 3 thì No,text_num,0.834,0.417,0.903,0.734
