@@ -17,7 +17,7 @@ streamlit run app.py
 | `app.py` | Trang chủ · Hồ sơ công ty · Tìm công ty · Viết review (Recommend or Not) · Dữ liệu & mô hình · Nhóm |
 | `ui.py` | Thành phần HTML/CSS: thang sao, thanh phân bố, thẻ review, khối hồ sơ công ty |
 | `itviec_core.py` | `clean_text`, stopwords, teencode, hàm gợi ý — chép từ notebook project_2 |
-| `train_models.py` | Train lại BT1 (TF-IDF sklearn, Gensim TF-IDF, Gensim LSI) + BT2 (LinearSVC, LogisticRegression) từ parquet của project_2 |
+| `train_models.py` | Train lại BT1 (TF-IDF sklearn, Gensim TF-IDF, Gensim LSI) + BT2 (LogisticRegression cho cả 2 kịch bản, ngưỡng chọn trên out-of-fold — notebook v5 mục 10.4) từ parquet của project_2 |
 | `models/` | `itviec_bt1.joblib`, `itviec_bt2.joblib` |
 | `data/` | `companies.parquet`, `reviews.parquet` (review + dự đoán của model), bảng so sánh, `sample_reviews.csv` (review mẫu tự viết) |
 | `images/` | Biểu đồ EDA / đánh giá xuất từ notebook |
